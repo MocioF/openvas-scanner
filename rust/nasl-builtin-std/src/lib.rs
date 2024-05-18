@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2024 Greenbone AG
 //
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: GPL-2.0-or-later WITH x11vnc-openssl-exception
 
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
@@ -75,6 +75,7 @@ pub fn nasl_std_functions<K: AsRef<str>>() -> nasl_builtin_utils::NaslFunctionRe
         .push_register(nasl_builtin_misc::Misc)
         .push_register(nasl_builtin_string::NaslString)
         .push_register(nasl_builtin_host::Host)
+        .push_register(nasl_builtin_http::NaslHttp::default())
         .push_register(nasl_builtin_cryptographic::Cryptographic)
         .push_register(nasl_builtin_description::Description);
     builder = add_ssh(builder);
@@ -233,6 +234,7 @@ impl<K: AsRef<str>, S> ContextBuilder<K, S> {
 
 impl<K: AsRef<str>> ContextBuilder<K, KeyDispatcherSet<K>> {
     /// Creates a new context builder with the given key and storage.
+    // TODO remove key and move it to build as they change per script call
     pub fn new(key: K, storage: Box<dyn Storage<K>>) -> Self {
         Self {
             key: KeyDispatcherSet { key, storage },

@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2024 Greenbone AG
 //
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: GPL-2.0-or-later WITH x11vnc-openssl-exception
 
 use std::collections::HashMap;
 
@@ -339,7 +339,7 @@ where
     async fn prepare_scan_params_for_openvas(&mut self) -> RedisStorageResult<()> {
         let options = self
             .scan_config
-            .scanner_preferences
+            .scan_preferences
             .clone()
             .iter()
             .map(|x| format!("{}|||{}", x.id, x.value))
@@ -528,8 +528,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_prefs() {
-        let mut scan = Scan::default();
-        scan.scan_id = "123-456".to_string();
+        let mut scan = Scan {
+            scan_id: "123-456".to_string(),
+            ..Default::default()
+        };
         scan.target.alive_test_methods = vec![AliveTestMethods::Icmp, AliveTestMethods::TcpSyn];
         scan.target.credentials = vec![Credential {
             service: models::Service::SSH,

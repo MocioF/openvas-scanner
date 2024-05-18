@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2023 Greenbone AG
 //
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: GPL-2.0-or-later WITH x11vnc-openssl-exception
 
 use std::sync::RwLock;
 
@@ -218,6 +218,10 @@ pub struct NoOpScanner;
 impl ScanStarter for NoOpScanner {
     async fn start_scan(&self, _: models::Scan) -> Result<(), Error> {
         Ok(())
+    }
+
+    async fn can_start_scan(&self, _: &models::Scan) -> bool {
+        true
     }
 }
 

@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2023 Greenbone AG
 //
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: GPL-2.0-or-later WITH x11vnc-openssl-exception
 
 mod context;
 pub mod entry;
@@ -169,6 +169,10 @@ mod tests {
         async fn start_scan(&self, _scan: models::Scan) -> Result<(), models::scanner::Error> {
             Ok(())
         }
+
+        async fn can_start_scan(&self, _: &models::Scan) -> bool {
+            true
+        }
     }
 
     #[async_trait]
@@ -285,6 +289,24 @@ mod tests {
         let resp = entrypoint(req, Arc::clone(&controller), cid).await.unwrap();
         assert_eq!(resp.headers().get("api-version").unwrap(), "1");
         assert_eq!(resp.headers().get("authentication").unwrap(), "");
+    }
+
+    #[tokio::test]
+    async fn get_scan_preferences() {
+        let controller = Arc::new(Context::default());
+        let req = Request::builder()
+            .uri("/scans/preferences")
+            .method(Method::GET)
+            .body(Empty::<Bytes>::new())
+            .unwrap();
+        let cid = Arc::new(ClientIdentifier::Known("42".into()));
+        entrypoint(req, Arc::clone(&controller), cid)
+            .await
+            .unwrap()
+            .into_body()
+            .collect()
+            .await
+            .unwrap();
     }
 
     async fn get_scan_status<S, DB>(id: &str, ctx: Arc<Context<S, DB>>) -> crate::response::Result
@@ -433,8 +455,10 @@ mod tests {
         let scanner = FakeScanner {
             count: Arc::new(RwLock::new(0)),
         };
-        let mut ns = crate::config::Scheduler::default();
-        ns.check_interval = std::time::Duration::from_nanos(10);
+        let ns = crate::config::Scheduler {
+            check_interval: std::time::Duration::from_nanos(10),
+            ..Default::default()
+        };
         let root = "/tmp/openvasd/fetch_results";
         let nfp = "../../examples/feed/nasl";
         let nofp = "../../examples/feed/notus/advisories";

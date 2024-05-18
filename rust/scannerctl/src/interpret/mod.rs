@@ -1,16 +1,16 @@
 // SPDX-FileCopyrightText: 2023 Greenbone AG
 //
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: GPL-2.0-or-later WITH x11vnc-openssl-exception
 
 use std::path::PathBuf;
 
 use feed::HashSumNameLoader;
 use nasl_interpreter::{
-    load_non_utf8_path, logger::DefaultLogger, logger::NaslLogger, ContextBuilder, FSPluginLoader,
-    Interpreter, KeyDispatcherSet, LoadError, Loader, NaslValue, NoOpLoader, RegisterBuilder,
+    load_non_utf8_path, CodeInterpreter, ContextBuilder, FSPluginLoader, KeyDispatcherSet,
+    LoadError, Loader, NaslValue, NoOpLoader, RegisterBuilder,
 };
 use redis_storage::FEEDUPDATE_SELECTOR;
-use storage::{DefaultDispatcher, Dispatcher, Retriever};
+use storage::DefaultDispatcher;
 
 use crate::{CliError, CliErrorKind, Db};
 
@@ -76,63 +76,39 @@ impl Run<String> {
     }
 
     fn run(&self, script: &str) -> Result<(), CliErrorKind> {
-        let logger = DefaultLogger::default();
         let context = self.context_builder.build();
-        let mut register = RegisterBuilder::build();
-        let mut interpreter = Interpreter::new(&mut register, &context);
+        let register = RegisterBuilder::build();
         let code = self.load(script)?;
-        for stmt in nasl_syntax::parse(&code) {
-            match stmt {
-                Ok(stmt) => {
-                    tracing::debug!("> {stmt}");
-                    let r = match interpreter.retry_resolve(&stmt, 5) {
-                        Ok(x) => x,
-                        Err(e) => match &e.kind {
-                            nasl_interpreter::InterpretErrorKind::FunctionCallError(
-                                nasl_interpreter::FunctionError {
-                                    function: _,
-                                    kind: nasl_interpreter::FunctionErrorKind::Diagnostic(_, x),
-                                },
-                            ) => {
-                                logger.warning(&e.to_string());
-                                x.clone().unwrap_or_default()
-                            }
-                            _ => return Err(e.into()),
+        let interpreter =
+            CodeInterpreter::with_statement_callback(&code, register, &context, &|x| {
+                tracing::debug!("> {x}")
+            });
+        for result in interpreter {
+            let r = match result {
+                Ok(x) => x,
+                Err(e) => match &e.kind {
+                    nasl_interpreter::InterpretErrorKind::FunctionCallError(
+                        nasl_interpreter::FunctionError {
+                            function: _,
+                            kind: nasl_interpreter::FunctionErrorKind::Diagnostic(_, x),
                         },
-                    };
-                    match r {
-                        NaslValue::Exit(rc) => std::process::exit(rc as i32),
-                        _ => {
-                            tracing::debug!("=> {r:?}", r = r);
-                        }
+                    ) => {
+                        tracing::warn!(error=?e, "function call error");
+                        x.clone().unwrap_or_default()
                     }
-                }
-
-                Err(e) => {
-                    context.executor().nasl_fn_cache_clear();
-                    return Err(e.into());
-                }
+                    _ => return Err(e.into()),
+                },
             };
+            match r {
+                NaslValue::Exit(rc) => std::process::exit(rc as i32),
+                _ => {
+                    tracing::debug!("=> {r:?}", r = r);
+                }
+            }
         }
+
         context.executor().nasl_fn_cache_clear();
         Ok(())
-    }
-}
-
-trait Storage<K>: Dispatcher<K> + Retriever<K> {
-    fn as_retriever(&self) -> &dyn Retriever<K>;
-    fn as_dispatcher(&self) -> &dyn Dispatcher<K>;
-}
-impl<T, K> Storage<K> for T
-where
-    T: Dispatcher<K> + Retriever<K> + Sized,
-{
-    fn as_retriever(&self) -> &dyn Retriever<K> {
-        self
-    }
-
-    fn as_dispatcher(&self) -> &dyn Dispatcher<K> {
-        self
     }
 }
 

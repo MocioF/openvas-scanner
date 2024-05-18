@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2023 Greenbone AG
 //
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: GPL-2.0-or-later WITH x11vnc-openssl-exception
 
 //! Defines NASL miscellaneous functions
 
@@ -9,7 +9,7 @@ use std::{
     fs::File,
     io::{Read, Write},
     thread,
-    time::{Duration, UNIX_EPOCH},
+    time::{self, Duration, UNIX_EPOCH},
 };
 
 use chrono::{
@@ -294,6 +294,37 @@ where
     })
 }
 
+/// Returns the seconds and microseconds counted from 1st January 1970. It formats a string
+/// containing the seconds separated by a `.` followed by the microseconds.
+///
+/// For example: “1067352015.030757” means 1067352015 seconds and 30757 microseconds.
+fn gettimeofday<K>(_: &Register, _: &Context<K>) -> Result<NaslValue, FunctionErrorKind>
+where
+    K: AsRef<str>,
+{
+    match time::SystemTime::now().duration_since(time::SystemTime::UNIX_EPOCH) {
+        Ok(time) => {
+            let time = time.as_micros();
+            Ok(NaslValue::String(format!(
+                "{}.{:06}",
+                time / 1000000,
+                time % 1000000
+            )))
+        }
+        Err(e) => Err(FunctionErrorKind::Dirty(format!("{e}"))),
+    }
+}
+
+/// Is a debug function to print the keys available within the called context. It does not take any
+/// nor returns any arguments.
+fn dump_ctxt<K>(register: &Register, _: &Context<K>) -> Result<NaslValue, FunctionErrorKind>
+where
+    K: AsRef<str>,
+{
+    register.dump(register.index() - 1);
+    Ok(NaslValue::Null)
+}
+
 /// Returns found function for key or None when not found
 fn lookup<K>(key: &str) -> Option<NaslFunction<K>>
 where
@@ -313,6 +344,8 @@ where
         "gzip" => Some(gzip),
         "gunzip" => Some(gunzip),
         "defined_func" => Some(defined_func),
+        "gettimeofday" => Some(gettimeofday),
+        "dump_ctxt" => Some(dump_ctxt),
         _ => None,
     }
 }

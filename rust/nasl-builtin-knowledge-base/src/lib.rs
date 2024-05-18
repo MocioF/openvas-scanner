@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2023 Greenbone AG
 //
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: GPL-2.0-or-later WITH x11vnc-openssl-exception
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -52,15 +52,14 @@ fn get_kb_item<K>(register: &Register, c: &Context<K>) -> Result<NaslValue, Func
             .retriever()
             .retrieve(c.key(), Retrieve::KB(x.to_string()))
             .map(|r| {
-                r.into_iter().find_map(|x| match x {
-                    Field::NVT(_) | Field::NotusAdvisory(_) => None,
-                    Field::KB(kb) => kb.value.into(),
-                })
+                r.into_iter()
+                    .filter_map(|x| match x {
+                        Field::NVT(_) | Field::NotusAdvisory(_) => None,
+                        Field::KB(kb) => Some(kb.value.into()),
+                    })
+                    .collect::<Vec<_>>()
             })
-            .map(|x| match x {
-                Some(x) => x.into(),
-                None => NaslValue::Null,
-            })
+            .map(NaslValue::Fork)
             .map_err(|e| e.into()),
         x => Err(FunctionErrorKind::Diagnostic(
             format!("expected one positional argument but got: {}", x.len()),
